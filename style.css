@@ -213,6 +213,12 @@ h2 {
   font-weight: 650;
 }
 
+.tip {
+  margin: 6px 0 0;
+  color: #8b93a3;
+  font-size: 14px;
+}
+
 .secondary-button.compact {
   width: auto;
   min-height: 52px;

@@ -31,6 +31,25 @@ when the browser supports file selection.
 - Every valid HTTPS URL is shown for review and requires pressing **Open URL**.
   There is no automatic redirect or domain allowlist.
 
+A real Tesla Caraoke QR code decodes to a Stingray companion link such as
+`https://karaoke-web-companion-prod.stingray.com/join?id=...`, so check that the
+displayed host looks like this before opening it.
+
+## Reading a QR code photographed from a screen
+
+Photographing the Tesla screen creates moire interference that hides QR modules,
+and many decoders fail on such images. The reader therefore retries each frame
+through several rendering passes: progressively stronger downscaling, an
+optional centre crop, Otsu binarisation, and a 3x3 median filter. The pass that
+succeeded is shown in the **Debug** panel.
+
+Tips if a scan fails:
+
+- Fill the guide frame with the QR code and hold steady for a second.
+- Reduce glare and tilt the phone slightly to break up the moire pattern.
+- Raise the phone's screen brightness.
+- Use **Upload QR Image** with a photo cropped to the QR code.
+
 ## Camera permission
 
 Camera access requires HTTPS and explicit browser permission. Tesla may expose
