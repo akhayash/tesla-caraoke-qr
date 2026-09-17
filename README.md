@@ -6,6 +6,9 @@ HTTPS URL for confirmation, and opens it only after a button press.
 
 **GitHub Pages:** https://akhayash.github.io/tesla-caraoke-qr/
 
+Bookmark that address in the car. GitHub retired its `git.io` link shortener in
+2022, so there is no shorter official address to type.
+
 ## Using it in a Tesla
 
 1. Put the vehicle in Park.
