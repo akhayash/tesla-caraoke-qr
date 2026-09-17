@@ -12,12 +12,9 @@
   <body>
     <main class="app">
       <section class="intro" id="intro">
-        <div class="brand" aria-hidden="true">QR</div>
         <h1>Tesla Caraoke<br>QR Reader</h1>
         <p class="subtitle">Scan the passenger app QR code with the cabin camera.</p>
         <button class="primary-button" id="scanButton" type="button">SCAN QR</button>
-        <button class="secondary-button" id="uploadButton" type="button">Upload QR Image</button>
-        <input id="fileInput" type="file" accept="image/*" hidden>
         <p class="parking-note">Camera access may only be available while the vehicle is in Park.</p>
       </section>
 
@@ -30,13 +27,12 @@
             </div>
           </div>
         </div>
-        <p class="instruction">Point the QR code at the cabin camera</p>
-        <p class="tip">Fill the guide frame and reduce screen glare. Screen photos can shimmer, so hold steady for a moment.</p>
+        <p class="instruction">Fill the frame with the QR code</p>
+        <p class="tip">Hold the phone close and steady. Reduce glare if the code shimmers.</p>
         <button class="secondary-button compact" id="cancelButton" type="button">Cancel</button>
       </section>
 
       <section class="result hidden" id="result" aria-live="assertive">
-        <div class="status-icon" id="statusIcon" aria-hidden="true">✓</div>
         <h2 id="resultTitle">QR detected</h2>
         <p id="resultMessage"></p>
         <output class="detected-value" id="detectedValue"></output>

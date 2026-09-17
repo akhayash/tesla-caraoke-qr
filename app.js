@@ -10,15 +10,12 @@ const elements = {
   camera: document.querySelector("#camera"),
   canvas: document.querySelector("#decodeCanvas"),
   scanButton: document.querySelector("#scanButton"),
-  uploadButton: document.querySelector("#uploadButton"),
-  fileInput: document.querySelector("#fileInput"),
   cancelButton: document.querySelector("#cancelButton"),
   scanAgainButton: document.querySelector("#scanAgainButton"),
   openButton: document.querySelector("#openButton"),
   resultTitle: document.querySelector("#resultTitle"),
   resultMessage: document.querySelector("#resultMessage"),
   detectedValue: document.querySelector("#detectedValue"),
-  statusIcon: document.querySelector("#statusIcon"),
   debugButton: document.querySelector("#debugButton"),
   debugPanel: document.querySelector("#debugPanel"),
   debugUserAgent: document.querySelector("#debugUserAgent"),
@@ -439,6 +436,31 @@ function navigateTo(url) {
   window.location.assign(url.href);
 }
 
+// The host is what matters when deciding whether to open a link, so show it
+// larger than the rest of the URL.
+function renderDetectedValue(value, url) {
+  elements.detectedValue.textContent = "";
+
+  if (!url) {
+    elements.detectedValue.textContent = value || "(empty QR data)";
+    return;
+  }
+
+  const scheme = document.createElement("span");
+  scheme.className = "url-scheme";
+  scheme.textContent = "https://";
+
+  const host = document.createElement("span");
+  host.className = "url-host";
+  host.textContent = url.host;
+
+  const rest = document.createElement("span");
+  rest.className = "url-rest";
+  rest.textContent = `${url.pathname}${url.search}${url.hash}`;
+
+  elements.detectedValue.append(scheme, host, rest);
+}
+
 function handleDetectedValue(rawValue) {
   if (!scanning && !elements.result.classList.contains("hidden")) {
     return;
@@ -451,62 +473,21 @@ function handleDetectedValue(rawValue) {
   const value = String(rawValue).trim();
   const httpsUrl = parseHttpsUrl(value);
   setDebug("debugDetected", value || "(empty)");
-  elements.detectedValue.textContent = value || "(empty QR data)";
-  elements.statusIcon.textContent = "✓";
+  renderDetectedValue(value, httpsUrl);
+  elements.detectedValue.classList.toggle("is-url", Boolean(httpsUrl));
   elements.resultTitle.textContent = "QR detected";
   showOnly("result");
   log("QR detected", value);
 
   if (!httpsUrl) {
-    elements.statusIcon.textContent = "!";
     elements.resultMessage.textContent = "This QR code is not a valid HTTPS URL and cannot be opened.";
     return;
   }
 
   detectedHttpsUrl = httpsUrl;
 
-  elements.resultMessage.textContent = "Review this HTTPS URL before opening it.";
+  elements.resultMessage.textContent = "Check the address, then open it.";
   elements.openButton.classList.remove("hidden");
-}
-
-async function decodeUploadedFile(file) {
-  clearError();
-  resetResult();
-  setDebug("debugCamera", "Using uploaded image");
-
-  if (!file?.type.startsWith("image/")) {
-    showError("Choose an image file containing a QR code.");
-    return;
-  }
-
-  let source;
-  let releaseSource = () => {};
-  try {
-    if (typeof createImageBitmap === "function") {
-      source = await createImageBitmap(file, { imageOrientation: "from-image" });
-      releaseSource = () => source.close?.();
-    } else {
-      const objectUrl = URL.createObjectURL(file);
-      source = new Image();
-      source.src = objectUrl;
-      await source.decode();
-      releaseSource = () => URL.revokeObjectURL(objectUrl);
-    }
-
-    const width = source.width || source.naturalWidth;
-    const height = source.height || source.naturalHeight;
-    const value = await decodeSource(source, width, height);
-    if (!value) {
-      showError("No QR code was found in that image. Try a clearer or more tightly cropped image.");
-      return;
-    }
-    handleDetectedValue(value);
-  } catch (error) {
-    showError(`Could not read the selected image: ${error.message}`);
-  } finally {
-    releaseSource();
-    elements.fileInput.value = "";
-  }
 }
 
 function returnToIntro() {
@@ -527,8 +508,6 @@ function initializeDebugPanel() {
 elements.scanButton.addEventListener("click", startCamera);
 elements.cancelButton.addEventListener("click", returnToIntro);
 elements.scanAgainButton.addEventListener("click", startCamera);
-elements.uploadButton.addEventListener("click", () => elements.fileInput.click());
-elements.fileInput.addEventListener("change", () => decodeUploadedFile(elements.fileInput.files[0]));
 elements.openButton.addEventListener("click", () => {
   if (detectedHttpsUrl) {
     navigateTo(detectedHttpsUrl);

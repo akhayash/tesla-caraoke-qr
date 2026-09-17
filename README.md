@@ -13,11 +13,11 @@ HTTPS URL for confirmation, and opens it only after a button press.
 3. Photograph the QR code with a phone.
 4. Open the GitHub Pages URL in the Tesla browser.
 5. Press **SCAN QR** and allow camera access.
-6. Show the QR image on the phone to the cabin camera.
-7. Confirm the displayed HTTPS URL, then press **Open URL**.
+6. Show the photo to the cabin camera so the QR code **fills the guide frame**.
+7. Check the address that appears, then press **Open URL**.
 
-If camera access is unavailable, use **Upload QR Image** to select a local image
-when the browser supports file selection.
+Filling the frame matters: if the QR code is small in the camera view there are
+too few pixels per module to decode.
 
 ## Privacy and security
 
@@ -48,7 +48,7 @@ Tips if a scan fails:
 - Fill the guide frame with the QR code and hold steady for a second.
 - Reduce glare and tilt the phone slightly to break up the moire pattern.
 - Raise the phone's screen brightness.
-- Use **Upload QR Image** with a photo cropped to the QR code.
+- Zoom into the QR code in the phone's photo viewer so it fills the screen.
 
 ## Camera permission
 
