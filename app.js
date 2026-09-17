@@ -2,6 +2,17 @@
 
 const SCAN_INTERVAL_MS = 120;
 
+// Recent links are kept in localStorage so they survive closing the browser.
+// Nothing is ever sent anywhere; the value is re-validated before it is opened.
+const STORAGE_KEY = "tesla-caraoke-qr.recent";
+const MAX_RECENT = 5;
+
+// Fallback for typing a session id by hand when the camera cannot read the code.
+// The most recent scanned link is preferred as the template; this is only used
+// before anything has been scanned, and is easy to edit.
+const DEFAULT_JOIN_URL = "https://karaoke-web-companion-prod.stingray.com/join?id=ID";
+const SESSION_ID_PATTERN = /^[A-Za-z0-9._~-]{1,64}$/;
+
 const elements = {
   intro: document.querySelector("#intro"),
   scanner: document.querySelector("#scanner"),
@@ -16,6 +27,11 @@ const elements = {
   resultTitle: document.querySelector("#resultTitle"),
   resultMessage: document.querySelector("#resultMessage"),
   detectedValue: document.querySelector("#detectedValue"),
+  recent: document.querySelector("#recent"),
+  recentList: document.querySelector("#recentList"),
+  clearRecentButton: document.querySelector("#clearRecentButton"),
+  manualForm: document.querySelector("#manualForm"),
+  manualId: document.querySelector("#manualId"),
   debugButton: document.querySelector("#debugButton"),
   debugPanel: document.querySelector("#debugPanel"),
   debugUserAgent: document.querySelector("#debugUserAgent"),
@@ -24,6 +40,7 @@ const elements = {
   debugDecoder: document.querySelector("#debugDecoder"),
   debugCamera: document.querySelector("#debugCamera"),
   debugPass: document.querySelector("#debugPass"),
+  debugStorage: document.querySelector("#debugStorage"),
   debugDetected: document.querySelector("#debugDetected"),
 };
 
@@ -119,6 +136,7 @@ function resetResult() {
   detectedHttpsUrl = null;
   elements.openButton.classList.add("hidden");
   elements.detectedValue.textContent = "";
+  elements.resultMessage.classList.remove("is-warning");
   setDebug("debugDetected", "None");
 }
 
@@ -436,8 +454,242 @@ function navigateTo(url) {
   window.location.assign(url.href);
 }
 
+// Storage can be missing or blocked, so probe it once instead of assuming.
+function getStorage() {
+  try {
+    const storage = window.localStorage;
+    const probeKey = `${STORAGE_KEY}.probe`;
+    storage.setItem(probeKey, "1");
+    storage.removeItem(probeKey);
+    return storage;
+  } catch (error) {
+    log("localStorage unavailable", error);
+    return null;
+  }
+}
+
+const storage = getStorage();
+
+// Stored values are user-writable, so every entry is re-validated on read.
+function loadRecent() {
+  if (!storage) {
+    return [];
+  }
+
+  try {
+    const raw = storage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((entry) => {
+        const url = entry && typeof entry.href === "string" ? parseHttpsUrl(entry.href) : null;
+        if (!url) {
+          return null;
+        }
+        return {
+          href: url.href,
+          savedAt: Number(entry.savedAt) || 0,
+          openedAt: Number(entry.openedAt) || 0,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, MAX_RECENT);
+  } catch (error) {
+    log("Could not read saved links", error);
+    return [];
+  }
+}
+
+function writeRecent(entries) {
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_RECENT)));
+  } catch (error) {
+    log("Could not save link", error);
+  }
+}
+
+function saveRecent(url) {
+  if (!storage) {
+    return;
+  }
+
+  const previous = loadRecent().find((entry) => entry.href === url.href);
+  const entries = loadRecent().filter((entry) => entry.href !== url.href);
+  entries.unshift({
+    href: url.href,
+    savedAt: Date.now(),
+    openedAt: previous ? previous.openedAt : 0,
+  });
+
+  writeRecent(entries);
+  log("Saved link locally", url.href);
+  renderRecent();
+}
+
+function markOpened(href) {
+  const entries = loadRecent();
+  const entry = entries.find((item) => item.href === href);
+  if (entry) {
+    entry.openedAt = Date.now();
+    writeRecent(entries);
+  }
+}
+
+function clearRecent() {
+  try {
+    storage?.removeItem(STORAGE_KEY);
+  } catch (error) {
+    log("Could not clear saved links", error);
+  }
+  renderRecent();
+}
+
+function formatAbsoluteTime(timestamp) {
+  const date = new Date(timestamp);
+  const sameDay = new Date().toDateString() === date.toDateString();
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (sameDay) {
+    return time;
+  }
+  return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
+}
+
+function formatRelativeTime(timestamp) {
+  const minutes = Math.round((Date.now() - timestamp) / 60000);
+  if (minutes < 1) {
+    return "just now";
+  }
+  if (minutes < 60) {
+    return `${minutes} min ago`;
+  }
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours} h ago`;
+  }
+
+  const days = Math.round(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+// Saved links can go stale, so always say how old the entry is.
+function describeTiming(entry) {
+  const timestamp = Math.max(entry.savedAt, entry.openedAt);
+  if (!timestamp) {
+    return "";
+  }
+
+  const verb = entry.openedAt > entry.savedAt ? "Opened" : "Scanned";
+  return `${verb} ${formatAbsoluteTime(timestamp)} · ${formatRelativeTime(timestamp)}`;
+}
+
+// The id alone is not a link, so reuse the most recent scanned link as the
+// template and swap only the id. That keeps the domain out of the hard-coded
+// path whenever anything has been scanned before.
+function buildManualUrl(input) {
+  const value = input.trim();
+  if (!value) {
+    return null;
+  }
+
+  if (value.includes("://")) {
+    return parseHttpsUrl(value);
+  }
+
+  if (!SESSION_ID_PATTERN.test(value)) {
+    return null;
+  }
+
+  const template = loadRecent()[0]?.href ?? DEFAULT_JOIN_URL;
+  const url = parseHttpsUrl(template);
+  if (!url) {
+    return null;
+  }
+
+  url.searchParams.set("id", value);
+  return parseHttpsUrl(url.href);
+}
+
+function submitManualId(event) {
+  event.preventDefault();
+  clearError();
+
+  const url = buildManualUrl(elements.manualId.value);
+  if (!url) {
+    showError("Enter the session ID shown in the QR code, for example K1Q-nQ.");
+    return;
+  }
+
+  saveRecent(url);
+  markOpened(url.href);
+  navigateTo(url);
+}
+
+function describeEntry(url) {
+  const id = url.searchParams.get("id");
+  return id ? `Join ${id}` : url.host;
+}
+
+function renderRecent() {
+  const entries = loadRecent();
+  setDebug("debugStorage", storage ? `Available, ${entries.length} saved` : "Unavailable");
+  elements.recentList.textContent = "";
+  elements.recent.classList.toggle("hidden", entries.length === 0);
+
+  for (const entry of entries) {
+    const url = parseHttpsUrl(entry.href);
+    if (!url) {
+      continue;
+    }
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "recent-item";
+
+    const label = document.createElement("span");
+    label.className = "recent-label";
+    label.textContent = describeEntry(url);
+
+    const meta = document.createElement("span");
+    meta.className = "recent-meta";
+    meta.textContent = url.host;
+
+    button.append(label, meta);
+
+    const timing = describeTiming(entry);
+    if (timing) {
+      const time = document.createElement("span");
+      time.className = "recent-time";
+      time.textContent = timing;
+      button.append(time);
+    }
+
+    // Re-validate at click time as well, in case storage changed meanwhile.
+    button.addEventListener("click", () => {
+      const target = parseHttpsUrl(entry.href);
+      if (target) {
+        markOpened(entry.href);
+        navigateTo(target);
+      }
+    });
+    elements.recentList.append(button);
+  }
+}
+
 // The host is what matters when deciding whether to open a link, so show it
-// larger than the rest of the URL.
+// larger than the rest of the URL. The session id gets the same treatment
+// because it is the part that identifies the Caraoke session.
 function renderDetectedValue(value, url) {
   elements.detectedValue.textContent = "";
 
@@ -454,11 +706,40 @@ function renderDetectedValue(value, url) {
   host.className = "url-host";
   host.textContent = url.host;
 
-  const rest = document.createElement("span");
-  rest.className = "url-rest";
-  rest.textContent = `${url.pathname}${url.search}${url.hash}`;
+  elements.detectedValue.append(scheme, host);
 
-  elements.detectedValue.append(scheme, host, rest);
+  const id = url.searchParams.get("id");
+  const trailing = `${url.pathname}${url.search}${url.hash}`;
+  const idMarker = `id=${id}`;
+  const splitAt = id ? trailing.indexOf(idMarker) : -1;
+
+  if (splitAt === -1) {
+    const rest = document.createElement("span");
+    rest.className = "url-rest";
+    rest.textContent = trailing;
+    elements.detectedValue.append(rest);
+    return;
+  }
+
+  const before = document.createElement("span");
+  before.className = "url-rest";
+  before.textContent = `${trailing.slice(0, splitAt)}id=`;
+
+  const idPart = document.createElement("span");
+  idPart.className = "url-id";
+  idPart.textContent = id;
+
+  const after = document.createElement("span");
+  after.className = "url-rest";
+  after.textContent = trailing.slice(splitAt + idMarker.length);
+
+  elements.detectedValue.append(before, idPart, after);
+}
+
+// A host that is not plain ASCII can be built to look like a familiar domain,
+// so point it out instead of quietly showing the lookalike.
+function isLookalikeHost(host) {
+  return /[^a-z0-9.-]/i.test(host) || host.split(".").some((part) => part.startsWith("xn--"));
 }
 
 function handleDetectedValue(rawValue) {
@@ -485,8 +766,16 @@ function handleDetectedValue(rawValue) {
   }
 
   detectedHttpsUrl = httpsUrl;
+  saveRecent(httpsUrl);
 
-  elements.resultMessage.textContent = "Check the address, then open it.";
+  if (isLookalikeHost(httpsUrl.host)) {
+    elements.resultMessage.textContent =
+      "This address uses unusual characters and may imitate a familiar site. Open it only if you trust it.";
+    elements.resultMessage.classList.add("is-warning");
+  } else {
+    elements.resultMessage.textContent = "Check the address, then open it.";
+  }
+
   elements.openButton.classList.remove("hidden");
 }
 
@@ -510,9 +799,12 @@ elements.cancelButton.addEventListener("click", returnToIntro);
 elements.scanAgainButton.addEventListener("click", startCamera);
 elements.openButton.addEventListener("click", () => {
   if (detectedHttpsUrl) {
+    markOpened(detectedHttpsUrl.href);
     navigateTo(detectedHttpsUrl);
   }
 });
+elements.clearRecentButton.addEventListener("click", clearRecent);
+elements.manualForm.addEventListener("submit", submitManualId);
 elements.debugButton.addEventListener("click", () => {
   const isOpen = !elements.debugPanel.classList.toggle("hidden");
   elements.debugButton.setAttribute("aria-expanded", String(isOpen));
@@ -527,11 +819,16 @@ document.addEventListener("visibilitychange", () => {
 
 initializeDebugPanel();
 initializeDetector();
+renderRecent();
 
 // Small, read-only test surface for automated checks and host configuration review.
 window.teslaCaraokeQr = Object.freeze({
   parseHttpsUrl,
   handleDetectedValue,
   decodeSource,
+  loadRecent,
+  renderRecent,
+  buildManualUrl,
+  isLookalikeHost,
   passes: DECODE_PASSES.map((pass) => ({ ...pass })),
 });

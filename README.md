@@ -19,6 +19,27 @@ HTTPS URL for confirmation, and opens it only after a button press.
 Filling the frame matters: if the QR code is small in the camera view there are
 too few pixels per module to decode.
 
+## Reconnecting without scanning again
+
+Every HTTPS link you scan is kept on the start screen under **Recent links**,
+with the session id and the time it was scanned or last opened. Pressing one
+opens it again, which avoids a second scan after the browser is closed.
+
+If the camera cannot read the code at all, type the session id into **Or enter
+the session id** and press **Join**. The most recently scanned link is used as
+the template and only the id is replaced, so the address comes from a link you
+scanned yourself. Before anything has been scanned, `DEFAULT_JOIN_URL` in
+`app.js` is used instead; edit that constant if the Caraoke address changes. A
+complete `https://` URL can also be pasted into the same field.
+
+Recent links are stored with `localStorage` in the car only. They are never sent
+anywhere, and **Clear** removes them. The Tesla browser supports `localStorage`,
+but it can be wiped by a vehicle software update, by *Controls > Service > Clear
+Browser Data*, or occasionally by a reboot, so treat the list as a convenience
+rather than permanent storage. A saved session id may also expire on Stingray's
+side. The **Debug** panel reports whether storage is available and how many
+links are saved.
+
 ## Privacy and security
 
 - QR recognition runs entirely in the browser. Images and decoded QR data are
@@ -30,6 +51,12 @@ too few pixels per module to decode.
   `data:`, `file:`, and plain `http:` are rejected.
 - Every valid HTTPS URL is shown for review and requires pressing **Open URL**.
   There is no automatic redirect or domain allowlist.
+- Saved links are re-checked against the same HTTPS rules each time they are
+  read, so an edited `localStorage` entry cannot introduce an unsafe address.
+- The host and the session id are shown in a larger font because they are the
+  parts worth checking. A host containing non-ASCII or punycode (`xn--`)
+  characters can imitate a familiar domain, so it is shown in its punycode form
+  together with a warning.
 
 A real Tesla Caraoke QR code decodes to a Stingray companion link such as
 `https://karaoke-web-companion-prod.stingray.com/join?id=...`, so check that the
@@ -63,7 +90,8 @@ state, the user agent, and the latest decoded data.
 
 - `index.html` - page structure
 - `style.css` - touch-friendly responsive layout
-- `app.js` - camera, decoding, HTTPS validation, confirmation, and debug logic
+- `app.js` - camera, decoding, HTTPS validation, confirmation, saved links, and
+  debug logic
 - `vendor/jsQR.js` - local jsQR 1.4.0 fallback
 - `vendor/jsQR.LICENSE` - jsQR Apache 2.0 license
 

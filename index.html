@@ -16,6 +16,24 @@
         <p class="subtitle">Scan the passenger app QR code with the cabin camera.</p>
         <button class="primary-button" id="scanButton" type="button">SCAN QR</button>
         <p class="parking-note">Camera access may only be available while the vehicle is in Park.</p>
+
+        <div class="recent hidden" id="recent">
+          <div class="recent-head">
+            <h2 class="recent-title">Recent links</h2>
+            <button class="text-button" id="clearRecentButton" type="button">Clear</button>
+          </div>
+          <div class="recent-list" id="recentList"></div>
+        </div>
+
+        <form class="manual" id="manualForm">
+          <label class="manual-label" for="manualId">Or enter the session ID</label>
+          <div class="manual-row">
+            <input class="manual-input" id="manualId" name="manualId" type="text"
+                   inputmode="text" autocomplete="off" autocapitalize="off"
+                   autocorrect="off" spellcheck="false" placeholder="K1Q-nQ">
+            <button class="secondary-button compact" type="submit">Join</button>
+          </div>
+        </form>
       </section>
 
       <section class="scanner hidden" id="scanner" aria-live="polite">
@@ -54,6 +72,7 @@
             <div><dt>Decoder</dt><dd id="debugDecoder"></dd></div>
             <div><dt>Camera</dt><dd id="debugCamera"></dd></div>
             <div><dt>Decode pass</dt><dd id="debugPass"></dd></div>
+            <div><dt>Local storage</dt><dd id="debugStorage"></dd></div>
             <div><dt>Detected data</dt><dd id="debugDetected"></dd></div>
           </dl>
         </div>
